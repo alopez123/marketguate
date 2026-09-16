@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+export const dynamic = 'force-dynamic';
 
 export default function ActivatePage() {
   const searchParams = useSearchParams()
