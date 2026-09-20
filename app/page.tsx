@@ -29,10 +29,11 @@ export default function MarketplaceView() {
   const [favorites, setFavorites] = useState<number[]>([])
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false)
 
-  // Estado para el Historial de Compras
+  // Estado para el Historial de Compras y Calificaciones
   const [showHistory, setShowHistory] = useState(false)
   const [orderHistory, setOrderHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [productRatings, setProductRatings] = useState<{ [key: string]: number }>({})
 
   // Buscadores y filtros avanzados
   const [globalSearch, setGlobalSearch] = useState('')
@@ -53,6 +54,11 @@ export default function MarketplaceView() {
   const [customerNit, setCustomerNit] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+
+  // Estado para el Modal de Mensaje Directo de WhatsApp a la Sucursal
+  const [isBranchWhatsAppModalOpen, setIsBranchWhatsAppModalOpen] = useState(false)
+  const [branchWhatsAppName, setBranchWhatsAppName] = useState('')
+  const [branchWhatsAppMessage, setBranchWhatsAppMessage] = useState('')
 
   // Estado para la notificación flotante (Toast)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -80,6 +86,7 @@ export default function MarketplaceView() {
       setCustomerNit(lastOrder.customer_nit || '')
       setCustomerPhone(lastOrder.customer_phone || '')
       setCustomerAddress(lastOrder.customer_address || '')
+      setBranchWhatsAppName(lastOrder.customer_name || '')
     }
   }
 
@@ -95,6 +102,20 @@ export default function MarketplaceView() {
     } else {
       setOrderHistory([])
     }
+
+    const { data: ratingsData } = await supabase
+      .from('product_ratings')
+      .select('*')
+      .eq('user_email', targetEmail)
+
+    if (ratingsData) {
+      const ratingsMap: { [key: string]: number } = {}
+      ratingsData.forEach((r: any) => {
+        ratingsMap[`${r.order_id}-${r.product_name}`] = r.rating
+      })
+      setProductRatings(ratingsMap)
+    }
+
     setLoadingHistory(false)
   }
 
@@ -230,6 +251,79 @@ export default function MarketplaceView() {
   }
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+  // Función con validación estricta: Solo permite calificar si el pedido está ENTREGADO
+  async function handleRateProduct(order: any, item: any, rating: number) {
+    const orderStatus = (order.status || '').toLowerCase()
+    if (orderStatus !== 'entregado') {
+      setToastMessage(`⚠️ Solo puedes calificar productos de pedidos en estado Entregado`)
+      setTimeout(() => setToastMessage(null), 3000)
+      return
+    }
+
+    const key = `${order.id}-${item.name}`
+    setProductRatings(prev => ({ ...prev, [key]: rating }))
+
+    const userEmail = user?.email || email || 'No especificado'
+
+    let businessId = order.business_id || selectedBranch?.business_id || null
+    if (!businessId) {
+      const storedBiz = localStorage.getItem('currentBusiness')
+      if (storedBiz) {
+        try {
+          businessId = JSON.parse(storedBiz).id || null
+        } catch (e) {}
+      }
+    }
+
+    const branchId = order.branch_id || selectedBranch?.id || null
+
+    const payload = {
+      order_id: Number(order.id) || null,
+      business_id: businessId || null,
+      branch_id: branchId !== null ? Number(branchId) : null,
+      product_name: item.name,
+      user_email: userEmail,
+      rating: Number(rating)
+    }
+
+    const { error } = await supabase
+      .from('product_ratings')
+      .upsert([payload], { onConflict: 'order_id,product_name,user_email' })
+
+    if (error) {
+      console.error('Error al guardar la calificación:', error.message)
+      setToastMessage(`⚠️ Error al guardar: ${error.message}`)
+    } else {
+      setToastMessage(`⭐ ¡Calificación de ${rating} estrellas guardada!`)
+    }
+    setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  function handleSendBranchWhatsApp(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedBranch) return
+
+    const branchPhone = selectedBranch.phone || selectedBranch.businesses?.phone || ''
+    let rawPhone = branchPhone.replace(/\D/g, '')
+    
+    if (!rawPhone) {
+      alert("⚠️ Esta sucursal no tiene un número de teléfono registrado para WhatsApp.")
+      return
+    }
+
+    const phone = rawPhone.startsWith('502') ? rawPhone : `502${rawPhone}`
+
+    let message = `💬 *Consulta a Sucursal - MarketGuate*\n\n`
+    message += `📍 Sucursal: *${selectedBranch.name}*\n`
+    message += `👤 *Cliente:* ${branchWhatsAppName}\n\n`
+    message += `📝 *Mensaje:*\n${branchWhatsAppMessage}`
+
+    const encodedURL = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+    window.open(encodedURL, '_blank')
+    setIsBranchWhatsAppModalOpen(false)
+    setBranchWhatsAppMessage('')
+  }
 
   function handleDownloadPastPDF(order: any) {
     const doc = new jsPDF()
@@ -373,7 +467,17 @@ export default function MarketplaceView() {
 
     doc.save(`Pedido_MarketGuate_${Date.now()}.pdf`)
 
-    let rawPhone = selectedBranch?.phone ? selectedBranch.phone.replace(/\D/g, '') : ''
+    const branchPhone = selectedBranch?.phone || selectedBranch?.businesses?.phone || ''
+    let rawPhone = branchPhone.replace(/\D/g, '')
+
+    if (!rawPhone) {
+      alert("⚠️ Pedido registrado con éxito y PDF descargado, pero esta sucursal no tiene un número de teléfono registrado para abrir WhatsApp automáticamente.")
+      setIsCheckoutModalOpen(false)
+      setIsCartOpen(false)
+      setCart([])
+      return
+    }
+
     const phone = rawPhone.startsWith('502') ? rawPhone : `502${rawPhone}`
 
     let message = `🛒 *Nuevo Pedido - MarketGuate*\n\n`
@@ -504,11 +608,11 @@ export default function MarketplaceView() {
       
       {toastMessage && (
         <div className={`fixed top-6 right-6 z-50 text-white px-6 py-4 rounded-2xl shadow-2xl text-sm font-black tracking-wide animate-bounce flex items-center gap-3 border-2 ${
-          toastMessage.includes('Existencias') || toastMessage.includes('Stock') 
+          toastMessage.includes('Existencias') || toastMessage.includes('Stock') || toastMessage.includes('Error') || toastMessage.includes('Solo puedes calificar')
             ? 'bg-red-600 border-red-300' 
             : 'bg-cyan-600 border-cyan-300'
         }`}>
-          <span className="text-lg">{toastMessage.includes('Existencias') || toastMessage.includes('Stock') ? '⚠️' : '🛒'}</span>
+          <span className="text-lg">{toastMessage.includes('Existencias') || toastMessage.includes('Stock') || toastMessage.includes('Error') || toastMessage.includes('Solo puedes calificar') ? '⚠️' : '🛒'}</span>
           <span>{toastMessage}</span>
         </div>
       )}
@@ -696,6 +800,57 @@ export default function MarketplaceView() {
           </div>
         )}
 
+        {/* Modal para Enviar Mensaje Directo vía WhatsApp a la Sucursal */}
+        {isBranchWhatsAppModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors`}>
+              <button onClick={() => setIsBranchWhatsAppModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-cyan-500 font-bold text-sm">✕</button>
+              
+              <div className="text-center space-y-1">
+                <h3 className="text-xl font-black">Contactar a Sucursal</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Envía un mensaje personalizado a <strong>{selectedBranch?.name}</strong> para que lo atiendan directamente.</p>
+              </div>
+
+              <form onSubmit={handleSendBranchWhatsApp} className="space-y-4 text-xs">
+                <div className="space-y-1">
+                  <label htmlFor="branch-wa-name" className="font-semibold">Tu Nombre:</label>
+                  <input 
+                    id="branch-wa-name"
+                    name="branchWhatsAppName"
+                    type="text" 
+                    required
+                    value={branchWhatsAppName} 
+                    onChange={e => setBranchWhatsAppName(e.target.value)} 
+                    placeholder="Ej. Juan Pérez"
+                    className={`w-full ${darkMode ? 'bg-[#070b12] border-slate-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'} border rounded-xl px-4 py-3 outline-none focus:border-cyan-500`} 
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="branch-wa-msg" className="font-semibold">Tu Mensaje Personalizado:</label>
+                  <textarea 
+                    id="branch-wa-msg"
+                    name="branchWhatsAppMessage"
+                    rows={4}
+                    required
+                    value={branchWhatsAppMessage} 
+                    onChange={e => setBranchWhatsAppMessage(e.target.value)} 
+                    placeholder="Escribe tu consulta, duda sobre un producto o mensaje..."
+                    className={`w-full ${darkMode ? 'bg-[#070b12] border-slate-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'} border rounded-xl px-4 py-3 outline-none focus:border-cyan-500 resize-none`} 
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl uppercase tracking-wider shadow-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  💬 Enviar Mensaje a WhatsApp
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
         {isCheckoutModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors`}>
@@ -853,9 +1008,13 @@ export default function MarketplaceView() {
 
         {authModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors`}>
+            <div className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-sm rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors`}>
               <button onClick={() => setAuthModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-cyan-500 font-bold text-sm">✕</button>
               
+              <div className="flex justify-center mb-2">
+                <div className="w-36 h-24 rounded-2xl shadow-xl border border-cyan-500/40 bg-cover bg-center bg-no-repeat bg-[#070b12]" style={{ backgroundImage: "url('/marketguate.jpg')" }}></div>
+              </div>
+
               <div className="text-center space-y-1">
                 <h3 className="text-xl font-black">
                   {isForgotPassword ? 'Recupera tu contraseña' : isSignUp ? 'Crea tu cuenta en MarketGuate' : 'Inicia Sesión en MarketGuate'}
@@ -928,9 +1087,9 @@ export default function MarketplaceView() {
         {!user ? (
           <div className="min-h-[60vh] flex items-center justify-center">
             <div className={`${darkMode ? 'bg-[#111827] border-slate-800' : 'bg-white border-slate-300 shadow-xl'} border rounded-3xl p-8 md:p-12 text-center max-w-lg mx-auto space-y-6 transition-colors`}>
-              <div className="w-16 h-16 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 rounded-2xl mx-auto flex items-center justify-center text-2xl">
-                🔒
-              </div>
+              
+              <div className="w-48 h-32 border border-cyan-500/40 rounded-3xl mx-auto shadow-2xl bg-cover bg-center bg-no-repeat bg-[#070b12]" style={{ backgroundImage: "url('/marketguate.jpg')" }}></div>
+
               <div className="space-y-2">
                 <h3 className={`text-xl sm:text-2xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                   Acceso Restringido a MarketGuate
@@ -977,44 +1136,85 @@ export default function MarketplaceView() {
                 No tienes compras registradas en tu historial todavía.
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {orderHistory.map((order: any, idx: number) => {
                   const items = Array.isArray(order.cart_items) ? order.cart_items : []
+                  const status = order.status || 'Pendiente'
+                  const isDelivered = status.toLowerCase() === 'entregado'
+
                   return (
                     <div 
                       key={`order-${order.id || idx}`}
-                      className={`${darkMode ? 'bg-[#111827] border-slate-800' : 'bg-white border-slate-300 shadow-lg'} border rounded-3xl p-5 sm:p-6 space-y-4 transition-colors`}
+                      className={`${darkMode ? 'bg-[#111827] border-slate-800' : 'bg-white border-slate-300 shadow-xl'} border rounded-3xl p-6 sm:p-8 space-y-5 transition-colors`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-slate-300 dark:border-slate-800">
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-2.5 py-0.5 rounded-full font-bold uppercase">
-                            Pedido #{order.id}
-                          </span>
-                          <p className="text-xs text-slate-400 font-medium pt-1">📅 {new Date(order.created_at).toLocaleString()}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 border-slate-300 dark:border-slate-800">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-xs bg-cyan-500/20 text-cyan-500 dark:text-cyan-400 px-3.5 py-1 rounded-full font-black uppercase tracking-wider border border-cyan-500/30">
+                              Pedido #{order.id}
+                            </span>
+                            <span className={`text-xs px-3.5 py-1 rounded-full font-black uppercase tracking-wider border ${
+                              isDelivered 
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                                : status.toLowerCase() === 'en camino' || status.toLowerCase() === 'procesando' || status.toLowerCase() === 'despachado'
+                                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+                            }`}>
+                              ● Estado: {status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-400 font-semibold pt-1">📅 {new Date(order.created_at).toLocaleString()}</p>
                         </div>
-                        <div className="text-right flex items-center justify-between sm:justify-end gap-4">
-                          <span className="text-xs font-bold">NIT: {order.customer_nit}</span>
-                          <span className="text-cyan-600 dark:text-cyan-400 font-mono font-black text-base">Q {Number(order.total).toFixed(2)}</span>
+                        <div className="text-right flex items-center justify-between sm:justify-end gap-6">
+                          <span className="text-sm font-bold text-slate-300">NIT: {order.customer_nit}</span>
+                          <span className="text-cyan-500 dark:text-cyan-400 font-mono font-black text-xl">Q {Number(order.total).toFixed(2)}</span>
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <span className="text-[11px] font-bold text-slate-400">Artículos ({items.reduce((a:any,c:any)=>a+Number(c.quantity),0)}):</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                          {items.map((item: any, i: number) => (
-                            <div key={`item-${i}`} className={`p-2.5 rounded-xl border text-xs flex justify-between items-center ${darkMode ? 'bg-[#070b12] border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
-                              <span className="truncate pr-2 font-medium">✨ {item.quantity}x {item.name}</span>
-                              <span className="font-mono font-bold shrink-0">Q {item.price * item.quantity}</span>
-                            </div>
-                          ))}
+                      <div className="space-y-3">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-400 block">Artículos ({items.reduce((a:any,c:any)=>a+Number(c.quantity),0)}) y Calificación:</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {items.map((item: any, i: number) => {
+                            const ratingKey = `${order.id}-${item.name}`
+                            const currentRating = productRatings[ratingKey] || 0
+                            return (
+                              <div key={`item-${i}`} className={`p-4 rounded-2xl border flex flex-col gap-3 ${darkMode ? 'bg-[#070b12] border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-800'}`}>
+                                <div className="flex justify-between items-center gap-2">
+                                  <span className="font-extrabold text-sm sm:text-base truncate">✨ {item.quantity}x {item.name}</span>
+                                  <span className="font-mono font-black text-sm text-cyan-500 shrink-0">Q {item.price * item.quantity}</span>
+                                </div>
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                                  <span className="text-xs font-bold text-slate-400">
+                                    {isDelivered ? 'Califica este producto:' : '🔒 Disponible al ser Entregado'}
+                                  </span>
+                                  <div className={`flex items-center gap-1.5 ${!isDelivered ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={`star-${i}-${star}`}
+                                        type="button"
+                                        disabled={!isDelivered}
+                                        onClick={() => handleRateProduct(order, item, star)}
+                                        className={`text-lg sm:text-xl transition-colors ${
+                                          star <= currentRating ? 'text-amber-400 scale-110' : 'text-slate-600 hover:text-slate-400'
+                                        } ${!isDelivered ? 'cursor-not-allowed' : ''}`}
+                                        title={isDelivered ? `${star} estrellas` : 'Pedido no entregado aún'}
+                                      >
+                                        ★
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
 
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2">
-                        <p className="text-xs text-slate-400 truncate max-w-md">📍 <strong>Entrega:</strong> {order.customer_address}</p>
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-3 border-t border-slate-800/50">
+                        <p className="text-sm text-slate-300">📍 <strong>Entrega:</strong> {order.customer_address}</p>
                         <button 
                           onClick={() => handleDownloadPastPDF(order)}
-                          className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow flex items-center gap-1.5 shrink-0"
+                          className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all shadow flex items-center gap-2 shrink-0 uppercase tracking-wider"
                         >
                           📄 Descargar PDF de Comprobante
                         </button>
@@ -1055,14 +1255,15 @@ export default function MarketplaceView() {
 
               <div className="flex items-center gap-3 relative z-10">
                 {selectedBranch.phone && (
-                  <a 
-                    href={`https://wa.me/502${selectedBranch.phone.replace(/\D/g, '')}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                  <button 
+                    onClick={() => {
+                      if (customerName) setBranchWhatsAppName(customerName)
+                      setIsBranchWhatsAppModalOpen(true)
+                    }}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl text-xs font-bold transition-all shadow-lg flex items-center gap-2 whitespace-nowrap"
                   >
                     💬 WhatsApp Sucursal
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
@@ -1209,14 +1410,28 @@ export default function MarketplaceView() {
         ) : (
           <div className="space-y-8" suppressHydrationWarning>
             
-            <div className="w-full rounded-3xl overflow-hidden bg-gradient-to-r from-cyan-950 via-slate-900 to-blue-950 p-6 sm:p-10 border border-cyan-500/30 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="relative z-10 space-y-2 text-left max-w-2xl text-white">
-                <span className="bg-cyan-500/20 text-cyan-300 text-[10px] font-extrabold uppercase px-3 py-1 rounded-full border border-cyan-500/30">
+            <div className="w-full relative rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900 via-[#0b1329] to-cyan-950 p-8 sm:p-12 border border-cyan-500/30 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col md:flex-row items-center justify-between gap-6 transition-all duration-500 hover:border-cyan-400/60">
+              
+              <div className="absolute -top-24 -left-24 w-56 h-56 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute -bottom-24 -right-24 w-56 h-56 bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+              <div className="relative z-10 space-y-3 text-left max-w-2xl text-white">
+                <div className="inline-flex items-center gap-2 bg-cyan-500/10 text-cyan-400 text-[10px] font-extrabold uppercase px-3.5 py-1.5 rounded-full border border-cyan-500/30 tracking-wider shadow-inner">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
                   ⚡ MarketGuate en Vivo
-                </span>
-                <h3 className="text-xl sm:text-3xl font-black">Todo en un mismo lugar: sucursales y productos de toda Guate</h3>
-                <p className="text-slate-300 text-xs sm:text-sm">Consulta existencias, arma tu carrito y genera tus pedidos directamente vía WhatsApp.</p>
+                </div>
+                
+                <h3 className="text-2xl sm:text-3xl font-black tracking-tight leading-snug bg-gradient-to-r from-white via-slate-100 to-cyan-200 bg-clip-text text-transparent">
+                  Todo en un mismo lugar: sucursales y productos de toda Guate
+                </h3>
+                
+                <p className="text-slate-300 text-xs sm:text-sm font-medium leading-relaxed">
+                  Consulta existencias, arma tu carrito y genera tus pedidos directamente vía WhatsApp.
+                </p>
               </div>
+
+              <div className="relative z-10 w-72 h-44 sm:w-80 sm:h-48 rounded-2xl shadow-2xl border-2 border-cyan-400/60 bg-contain bg-center bg-no-repeat bg-[#070b12] shrink-0" style={{ backgroundImage: "url('/marketguate.jpg')" }}></div>
+
             </div>
 
             {globalSearch.trim() !== '' ? (
