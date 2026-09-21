@@ -16,6 +16,9 @@ export default function MarketplaceView() {
   // Estado para el Tema (Claro u Oscuro)
   const [darkMode, setDarkMode] = useState(true)
 
+  // Estado para Menú Móvil Desplegable
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   // Estados de Autenticación con marketusers
   const [user, setUser] = useState<any>(null)
   const [authModalOpen, setAuthModalOpen] = useState(false)
@@ -184,6 +187,8 @@ export default function MarketplaceView() {
           fetchUserProfile(data.user.email)
         }
         setAuthModalOpen(false)
+        setToastMessage('🎉 ¡Sesión iniciada con éxito!')
+        setTimeout(() => setToastMessage(null), 3000)
       }
     } catch (err: any) {
       alert(err.message || 'Ocurrió un error en la autenticación')
@@ -202,11 +207,20 @@ export default function MarketplaceView() {
     setCustomerNit('')
     setCustomerPhone('')
     setCustomerAddress('')
+    setMobileMenuOpen(false)
     fetchMarketplaceData()
   }
 
   function toggleFavorite(branchId: number, e: React.MouseEvent) {
     e.stopPropagation()
+    if (!user) {
+      setToastMessage('🔒 Inicia sesión para guardar favoritos')
+      setTimeout(() => setToastMessage(null), 3000)
+      setIsSignUp(false)
+      setIsForgotPassword(false)
+      setAuthModalOpen(true)
+      return
+    }
     if (favorites.includes(branchId)) {
       setFavorites(favorites.filter(id => id !== branchId))
     } else {
@@ -214,8 +228,19 @@ export default function MarketplaceView() {
     }
   }
 
+  // VALIDACIÓN DE LOGIN AL AGREGAR AL CARRITO (JUST-IN-TIME)
   function addToCart(prod: any, e: React.MouseEvent) {
     e.stopPropagation()
+
+    if (!user) {
+      setToastMessage('🔒 Inicia sesión para agregar productos al pedido')
+      setTimeout(() => setToastMessage(null), 3000)
+      setIsSignUp(false)
+      setIsForgotPassword(false)
+      setAuthModalOpen(true)
+      return
+    }
+
     const existing = cart.find(item => item.id === prod.id)
     const currentQty = existing ? existing.quantity : 0
 
@@ -252,7 +277,6 @@ export default function MarketplaceView() {
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
-  // Función con validación estricta: Solo permite calificar si el pedido está ENTREGADO
   async function handleRateProduct(order: any, item: any, rating: number) {
     const orderStatus = (order.status || '').toLowerCase()
     if (orderStatus !== 'entregado') {
@@ -608,56 +632,31 @@ export default function MarketplaceView() {
       
       {toastMessage && (
         <div className={`fixed top-6 right-6 z-50 text-white px-6 py-4 rounded-2xl shadow-2xl text-sm font-black tracking-wide animate-bounce flex items-center gap-3 border-2 ${
-          toastMessage.includes('Existencias') || toastMessage.includes('Stock') || toastMessage.includes('Error') || toastMessage.includes('Solo puedes calificar')
+          toastMessage.includes('Existencias') || toastMessage.includes('Stock') || toastMessage.includes('Error') || toastMessage.includes('Solo puedes calificar') || toastMessage.includes('Inicia sesión')
             ? 'bg-red-600 border-red-300' 
             : 'bg-cyan-600 border-cyan-300'
         }`}>
-          <span className="text-lg">{toastMessage.includes('Existencias') || toastMessage.includes('Stock') || toastMessage.includes('Error') || toastMessage.includes('Solo puedes calificar') ? '⚠️' : '🛒'}</span>
+          <span className="text-lg">{toastMessage.includes('Existencias') || toastMessage.includes('Stock') || toastMessage.includes('Error') || toastMessage.includes('Solo puedes calificar') || toastMessage.includes('Inicia sesión') ? '🔒' : '🛒'}</span>
           <span>{toastMessage}</span>
         </div>
       )}
 
+      {/* HEADER LIBRE DE RESTRICCIONES (CATÁLOGO PÚBLICO) */}
       <header className={`sticky top-0 ${darkMode ? 'bg-[#070b12]/95 border-slate-800' : 'bg-white/95 border-slate-200'} backdrop-blur-md border-b z-40 px-4 sm:px-8 py-3 transition-colors`} suppressHydrationWarning>
-        <div className="w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="w-full mx-auto flex items-center justify-between gap-4">
           
-          <div className="flex items-center justify-between w-full sm:w-auto">
+          <div className="flex items-center gap-3">
             <div className="flex flex-col cursor-pointer" onClick={() => { setSelectedBranch(null); setShowOnlyFavorites(false); setShowHistory(false); fetchMarketplaceData(); }}>
               <span className={`text-base sm:text-lg font-black ${darkMode ? 'text-white' : 'text-slate-900'} tracking-wider`}>
                 MARKET<span className="text-cyan-500">GUATE</span>
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wide">Todo en un mismo lugar</span>
             </div>
-            
-            <div className="flex items-center gap-2 sm:hidden">
-              {selectedBranch && (
-                <button onClick={() => setIsCartOpen(true)} className="relative bg-cyan-600 text-white p-2 rounded-xl text-xs font-bold">
-                  🛒 {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-pink-600 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center">{cart.reduce((a,c)=>a+c.quantity,0)}</span>}
-                </button>
-              )}
-              <button 
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-xl text-xs font-bold border ${darkMode ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-white border-slate-300 text-slate-800 shadow-sm'}`}
-              >
-                {darkMode ? '☀️' : '🌙'}
-              </button>
-              {selectedBranch ? (
-                <button onClick={() => { setSelectedBranch(null); fetchMarketplaceData(); }} className="bg-slate-200 dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 px-3 py-1 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700">
-                  ← Volver
-                </button>
-              ) : user ? (
-                <button onClick={handleLogout} className="bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 px-3 py-1 rounded-xl text-xs font-bold">
-                  Salir
-                </button>
-              ) : (
-                <button onClick={() => { setIsSignUp(false); setIsForgotPassword(false); setAuthModalOpen(true); }} className="bg-cyan-600 text-white px-3 py-1 rounded-xl text-xs font-bold">
-                  Ingresar
-                </button>
-              )}
-            </div>
           </div>
 
-          {!selectedBranch && user && !showHistory && (
-            <div className="w-full sm:w-96 relative">
+          {/* Buscador global en desktop */}
+          {!selectedBranch && !showHistory && (
+            <div className="hidden md:flex w-96 relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
               <input 
                 id="global-search-input"
@@ -671,7 +670,8 @@ export default function MarketplaceView() {
             </div>
           )}
 
-          <div className="hidden sm:flex items-center gap-3">
+          {/* Botones de navegación en desktop */}
+          <div className="hidden md:flex items-center gap-3">
             {selectedBranch && (
               <button 
                 onClick={() => setIsCartOpen(true)} 
@@ -692,33 +692,49 @@ export default function MarketplaceView() {
               </button>
             )}
 
-            {user && (
-              <>
-                <button 
-                  onClick={() => {
-                    setShowHistory(!showHistory)
-                    setSelectedBranch(null)
-                    setShowOnlyFavorites(false)
-                    if (!showHistory) fetchOrderHistory()
-                    else fetchMarketplaceData()
-                  }}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                    showHistory ? 'bg-cyan-600 text-white border-cyan-400' : darkMode ? 'bg-[#111827] text-slate-300 border-slate-800 hover:border-slate-700' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400 shadow-sm'
-                  }`}
-                >
-                  <span>📦</span> Mis Pedidos
-                </button>
+            <button 
+              onClick={() => {
+                if (!user) {
+                  setToastMessage('🔒 Inicia sesión para ver tus pedidos')
+                  setTimeout(() => setToastMessage(null), 3000)
+                  setIsSignUp(false)
+                  setIsForgotPassword(false)
+                  setAuthModalOpen(true)
+                  return
+                }
+                setShowHistory(!showHistory)
+                setSelectedBranch(null)
+                setShowOnlyFavorites(false)
+                if (!showHistory) fetchOrderHistory()
+                else fetchMarketplaceData()
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                showHistory ? 'bg-cyan-600 text-white border-cyan-400' : darkMode ? 'bg-[#111827] text-slate-300 border-slate-800 hover:border-slate-700' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400 shadow-sm'
+              }`}
+            >
+              <span>📦</span> Mis Pedidos
+            </button>
 
-                <button 
-                  onClick={() => { setShowOnlyFavorites(!showOnlyFavorites); setSelectedBranch(null); setShowHistory(false); }}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                    showOnlyFavorites ? 'bg-pink-600 text-white border-pink-400' : darkMode ? 'bg-[#111827] text-slate-300 border-slate-800 hover:border-slate-700' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400 shadow-sm'
-                  }`}
-                >
-                  <span>❤️</span> Favoritos ({favorites.length})
-                </button>
-              </>
-            )}
+            <button 
+              onClick={() => { 
+                if (!user) {
+                  setToastMessage('🔒 Inicia sesión para ver tus favoritos')
+                  setTimeout(() => setToastMessage(null), 3000)
+                  setIsSignUp(false)
+                  setIsForgotPassword(false)
+                  setAuthModalOpen(true)
+                  return
+                }
+                setShowOnlyFavorites(!showOnlyFavorites); 
+                setSelectedBranch(null); 
+                setShowHistory(false); 
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                showOnlyFavorites ? 'bg-pink-600 text-white border-pink-400' : darkMode ? 'bg-[#111827] text-slate-300 border-slate-800 hover:border-slate-700' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400 shadow-sm'
+              }`}
+            >
+              <span>❤️</span> Favoritos ({favorites.length})
+            </button>
 
             <button 
               onClick={() => setDarkMode(!darkMode)}
@@ -739,7 +755,101 @@ export default function MarketplaceView() {
             )}
           </div>
 
+          {/* CONTROLES MÓVILES (BOTÓN CARRITO + MENÚ HAMBURGUESA) */}
+          <div className="flex items-center gap-2 md:hidden">
+            {selectedBranch && (
+              <button onClick={() => setIsCartOpen(true)} className="relative bg-cyan-600 text-white p-2.5 rounded-xl text-xs font-bold">
+                🛒 {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-pink-600 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center">{cart.reduce((a,c)=>a+c.quantity,0)}</span>}
+              </button>
+            )}
+            
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className={`p-2.5 rounded-xl text-xs font-bold border ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900 shadow-sm'}`}
+            >
+              {mobileMenuOpen ? '✕' : '☰'}
+            </button>
+          </div>
+
         </div>
+
+        {/* MENÚ DESPLEGABLE MÓVIL */}
+        {mobileMenuOpen && (
+          <div className={`md:hidden mt-3 pt-3 border-t ${darkMode ? 'border-slate-800 bg-[#111827]' : 'border-slate-200 bg-white'} rounded-2xl p-4 space-y-3 shadow-2xl`}>
+            {selectedBranch && (
+              <button 
+                onClick={() => { setSelectedBranch(null); fetchMarketplaceData(); setMobileMenuOpen(false); }} 
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-cyan-500/10 text-cyan-500"
+              >
+                ← Volver al Directorio
+              </button>
+            )}
+
+            <button 
+              onClick={() => {
+                if (!user) {
+                  setToastMessage('🔒 Inicia sesión para ver tus pedidos')
+                  setTimeout(() => setToastMessage(null), 3000)
+                  setIsSignUp(false)
+                  setIsForgotPassword(false)
+                  setAuthModalOpen(true)
+                  setMobileMenuOpen(false)
+                  return
+                }
+                setShowHistory(true)
+                setSelectedBranch(null)
+                setShowOnlyFavorites(false)
+                fetchOrderHistory()
+                setMobileMenuOpen(false)
+              }}
+              className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-slate-800/40"
+            >
+              <span>📦</span> Mis Pedidos
+            </button>
+
+            <button 
+              onClick={() => { 
+                if (!user) {
+                  setToastMessage('🔒 Inicia sesión para ver tus favoritos')
+                  setTimeout(() => setToastMessage(null), 3000)
+                  setIsSignUp(false)
+                  setIsForgotPassword(false)
+                  setAuthModalOpen(true)
+                  setMobileMenuOpen(false)
+                  return
+                }
+                setShowOnlyFavorites(true); 
+                setSelectedBranch(null); 
+                setShowHistory(false); 
+                setMobileMenuOpen(false); 
+              }}
+              className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-slate-800/40"
+            >
+              <span>❤️</span> Favoritos ({favorites.length})
+            </button>
+
+            <button 
+              onClick={() => { setDarkMode(!darkMode); setMobileMenuOpen(false); }}
+              className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-slate-800/40"
+            >
+              <span>{darkMode ? '☀️ Cambiar a Modo Claro' : '🌙 Cambiar a Modo Oscuro'}</span>
+            </button>
+
+            {user ? (
+              <div className="pt-2 border-t border-slate-700 flex items-center justify-between">
+                <span className="text-[11px] truncate max-w-[180px] text-slate-400">{user.email}</span>
+                <button onClick={handleLogout} className="text-red-400 font-bold text-xs">Cerrar Sesión</button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => { setIsSignUp(false); setIsForgotPassword(false); setAuthModalOpen(true); setMobileMenuOpen(false); }} 
+                className="w-full bg-cyan-600 text-white py-2.5 rounded-xl text-xs font-bold text-center shadow"
+              >
+                Iniciar Sesión / Registro
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       <main className="w-full px-4 sm:px-6 lg:px-10 py-6 space-y-8" suppressHydrationWarning>
@@ -1017,10 +1127,10 @@ export default function MarketplaceView() {
 
               <div className="text-center space-y-1">
                 <h3 className="text-xl font-black">
-                  {isForgotPassword ? 'Recupera tu contraseña' : isSignUp ? 'Crea tu cuenta en MarketGuate' : 'Inicia Sesión en MarketGuate'}
+                  {isForgotPassword ? 'Recupera tu contraseña' : isSignUp ? 'Crea tu cuenta en MarketGuate' : 'Inicia Sesión para continuar'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {isForgotPassword ? 'Te enviaremos un enlace de recuperación a tu correo.' : isSignUp ? 'Te enviaremos un correo de confirmación.' : 'Ingresa para ver todos los comercios y servicios.'}
+                  {isForgotPassword ? 'Te enviaremos un enlace de recuperación a tu correo.' : isSignUp ? 'Regístrate para guardar tu carrito y pedidos.' : 'Necesitamos identificarte para agregar productos al pedido.'}
                 </p>
               </div>
 
@@ -1060,7 +1170,7 @@ export default function MarketplaceView() {
                   disabled={authLoading}
                   className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-black py-3 rounded-xl uppercase tracking-wider shadow-lg transition-colors"
                 >
-                  {authLoading ? 'Procesando...' : isForgotPassword ? 'Enviar Enlace de Recuperación' : isSignUp ? 'Registrarse y Enviar Correo' : 'Iniciar Sesión'}
+                  {authLoading ? 'Procesando...' : isForgotPassword ? 'Enviar Enlace de Recuperación' : isSignUp ? 'Registrarse y Continuar' : 'Iniciar Sesión'}
                 </button>
               </form>
 
@@ -1084,42 +1194,12 @@ export default function MarketplaceView() {
           </div>
         )}
 
-        {!user ? (
-          <div className="min-h-[60vh] flex items-center justify-center">
-            <div className={`${darkMode ? 'bg-[#111827] border-slate-800' : 'bg-white border-slate-300 shadow-xl'} border rounded-3xl p-8 md:p-12 text-center max-w-lg mx-auto space-y-6 transition-colors`}>
-              
-              <div className="w-48 h-32 border border-cyan-500/40 rounded-3xl mx-auto shadow-2xl bg-cover bg-center bg-no-repeat bg-[#070b12]" style={{ backgroundImage: "url('/marketguate.jpg')" }}></div>
-
-              <div className="space-y-2">
-                <h3 className={`text-xl sm:text-2xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-                  Acceso Restringido a MarketGuate
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Inicia sesión o regístrate para ver todos los comercios, sucursales y servicios disponibles en un mismo lugar.
-                </p>
-              </div>
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button 
-                  onClick={() => { setIsSignUp(false); setIsForgotPassword(false); setAuthModalOpen(true); }}
-                  className="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-lg"
-                >
-                  Iniciar Sesión
-                </button>
-                <button 
-                  onClick={() => { setIsSignUp(true); setIsForgotPassword(false); setAuthModalOpen(true); }}
-                  className={`w-full sm:w-auto ${darkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'} border px-6 py-3 rounded-xl text-xs font-bold transition-all`}
-                >
-                  Registrarse
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : showHistory ? (
+        {showHistory ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className={`text-xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>📦 Tus Últimas 10 Compras</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Historial de pedidos realizados con tu cuenta ({user.email})</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Historial de pedidos realizados con tu cuenta ({user?.email})</p>
               </div>
               <button 
                 onClick={() => { setShowHistory(false); fetchMarketplaceData(); }} 
