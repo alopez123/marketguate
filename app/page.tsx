@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { jsPDF } from 'jspdf'
 
@@ -65,6 +65,12 @@ export default function MarketplaceView() {
 
   // Estado para la notificación flotante (Toast)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  // Referencias y estados para el desplazamiento por arrastre y flechas del carrusel
+  const categoryScrollRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [startX, setStartX] = useState(0)
+  const [scrollLeft, setScrollLeft] = useState(0)
 
   useEffect(() => {
     setIsMounted(true)
@@ -228,7 +234,6 @@ export default function MarketplaceView() {
     }
   }
 
-  // VALIDACIÓN DE LOGIN AL AGREGAR AL CARRITO (JUST-IN-TIME)
   function addToCart(prod: any, e: React.MouseEvent) {
     e.stopPropagation()
 
@@ -641,7 +646,7 @@ export default function MarketplaceView() {
         </div>
       )}
 
-      {/* HEADER LIBRE DE RESTRICCIONES (CATÁLOGO PÚBLICO) */}
+      {/* HEADER RESPONSIVE */}
       <header className={`sticky top-0 ${darkMode ? 'bg-[#070b12]/95 border-slate-800' : 'bg-white/95 border-slate-200'} backdrop-blur-md border-b z-40 px-4 sm:px-8 py-3 transition-colors`} suppressHydrationWarning>
         <div className="w-full mx-auto flex items-center justify-between gap-4">
           
@@ -654,7 +659,6 @@ export default function MarketplaceView() {
             </div>
           </div>
 
-          {/* Buscador global en desktop */}
           {!selectedBranch && !showHistory && (
             <div className="hidden md:flex w-96 relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
@@ -670,7 +674,6 @@ export default function MarketplaceView() {
             </div>
           )}
 
-          {/* Botones de navegación en desktop */}
           <div className="hidden md:flex items-center gap-3">
             {selectedBranch && (
               <button 
@@ -755,7 +758,6 @@ export default function MarketplaceView() {
             )}
           </div>
 
-          {/* CONTROLES MÓVILES (BOTÓN CARRITO + MENÚ HAMBURGUESA) */}
           <div className="flex items-center gap-2 md:hidden">
             {selectedBranch && (
               <button onClick={() => setIsCartOpen(true)} className="relative bg-cyan-600 text-white p-2.5 rounded-xl text-xs font-bold">
@@ -773,7 +775,6 @@ export default function MarketplaceView() {
 
         </div>
 
-        {/* MENÚ DESPLEGABLE MÓVIL */}
         {mobileMenuOpen && (
           <div className={`md:hidden mt-3 pt-3 border-t ${darkMode ? 'border-slate-800 bg-[#111827]' : 'border-slate-200 bg-white'} rounded-2xl p-4 space-y-3 shadow-2xl`}>
             {selectedBranch && (
@@ -910,7 +911,6 @@ export default function MarketplaceView() {
           </div>
         )}
 
-        {/* Modal para Enviar Mensaje Directo vía WhatsApp a la Sucursal */}
         {isBranchWhatsAppModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors`}>
@@ -1567,23 +1567,78 @@ export default function MarketplaceView() {
             ) : (
               <div className="space-y-6">
                 
-                <div className="space-y-3">
-                  <h2 className={`text-base font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Explora por Categoría</h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {/* CARRUSEL MODERNO CON BOTONES DE NAVEGACIÓN Y ARRASTRE FLUIDO */}
+                <div className="space-y-3 relative group">
+                  <div className="flex items-center justify-between">
+                    <h2 className={`text-sm sm:text-base font-black tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                      Explora por Categoría
+                    </h2>
+                    
+                    {/* Botones de Flechas de Navegación Estilo Premium */}
+                    <div className="hidden sm:flex items-center gap-2">
+                      <button 
+                        onClick={() => {
+                          if (categoryScrollRef.current) {
+                            categoryScrollRef.current.scrollBy({ left: -250, behavior: 'smooth' })
+                          }
+                        }}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all ${
+                          darkMode ? 'bg-slate-800/80 border-slate-700 text-white hover:bg-cyan-600 hover:border-cyan-500' : 'bg-white border-slate-300 text-slate-800 hover:bg-cyan-600 hover:text-white shadow-sm'
+                        }`}
+                        title="Desplazar a la izquierda"
+                      >
+                        ←
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (categoryScrollRef.current) {
+                            categoryScrollRef.current.scrollBy({ left: 250, behavior: 'smooth' })
+                          }
+                        }}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all ${
+                          darkMode ? 'bg-slate-800/80 border-slate-700 text-white hover:bg-cyan-600 hover:border-cyan-500' : 'bg-white border-slate-300 text-slate-800 hover:bg-cyan-600 hover:text-white shadow-sm'
+                        }`}
+                        title="Desplazar a la derecha"
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+
+                  <div 
+                    ref={categoryScrollRef}
+                    onMouseDown={(e) => {
+                      setIsDragging(true)
+                      setStartX(e.pageX - categoryScrollRef.current!.offsetLeft)
+                      setScrollLeft(categoryScrollRef.current!.scrollLeft)
+                    }}
+                    onMouseLeave={() => setIsDragging(false)}
+                    onMouseUp={() => setIsDragging(false)}
+                    onMouseMove={(e) => {
+                      if (!isDragging) return
+                      e.preventDefault()
+                      const x = e.pageX - categoryScrollRef.current!.offsetLeft
+                      const walk = (x - startX) * 1.5 // velocidad de arrastre
+                      categoryScrollRef.current!.scrollLeft = scrollLeft - walk
+                    }}
+                    className="flex items-center gap-3 overflow-x-auto pb-4 pt-2 scrollbar-none snap-x cursor-grab active:cursor-grabbing select-none"
+                  >
                     <button
                       onClick={() => setSelectedCategoryId(null)}
-                      className={`p-4 rounded-2xl text-left transition-all border flex flex-col justify-between gap-3 group ${
+                      className={`group snap-start relative flex items-center gap-3 px-5 py-3 rounded-2xl transition-all duration-300 shrink-0 border ${
                         selectedCategoryId === null 
-                          ? 'bg-cyan-600 text-white border-cyan-400 shadow-xl shadow-cyan-600/30 ring-2 ring-cyan-400/50' 
-                          : darkMode ? 'bg-[#111827] text-slate-300 border-slate-800 hover:border-cyan-500/50 hover:bg-slate-800/80' : 'bg-white text-slate-800 border-slate-300 hover:border-cyan-500 shadow-sm'
+                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400/50 shadow-lg shadow-cyan-600/30 scale-105 z-10' 
+                          : darkMode 
+                          ? 'bg-[#111827]/80 text-slate-300 border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-800/90 hover:scale-105' 
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-cyan-500/50 hover:scale-105 shadow-sm'
                       }`}
                     >
-                      <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg font-bold group-hover:scale-110 transition-transform">
-                        🌟
-                      </div>
-                      <div>
-                        <h4 className="font-black text-xs sm:text-sm">Todas</h4>
-                        <span className="text-[10px] opacity-80 font-medium">{branches.length} sucursales</span>
+                      <span className="text-xl group-hover:scale-110 transition-transform">🌟</span>
+                      <div className="text-left pointer-events-none">
+                        <span className="block font-black text-xs sm:text-sm tracking-wide">Todas</span>
+                        <span className={`block text-[10px] ${selectedCategoryId === null ? 'text-cyan-100' : 'text-slate-400'}`}>
+                          {branches.length} sucursales
+                        </span>
                       </div>
                     </button>
 
@@ -1595,18 +1650,20 @@ export default function MarketplaceView() {
                         <button
                           key={`cat-card-${cat.id}`}
                           onClick={() => setSelectedCategoryId(cat.id)}
-                          className={`p-4 rounded-2xl text-left transition-all border flex flex-col justify-between gap-3 group ${
+                          className={`group snap-start relative flex items-center gap-3 px-5 py-3 rounded-2xl transition-all duration-300 shrink-0 border ${
                             isSelected 
-                              ? 'bg-cyan-600 text-white border-cyan-400 shadow-xl shadow-cyan-600/30 ring-2 ring-cyan-400/50' 
-                              : darkMode ? 'bg-[#111827] text-slate-300 border-slate-800 hover:border-cyan-500/50 hover:bg-slate-800/80' : 'bg-white text-slate-800 border-slate-300 hover:border-cyan-500 shadow-sm'
+                              ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400/50 shadow-lg shadow-cyan-600/30 scale-105 z-10' 
+                              : darkMode 
+                              ? 'bg-[#111827]/80 text-slate-300 border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-800/90 hover:scale-105' 
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-cyan-500/50 hover:scale-105 shadow-sm'
                           }`}
                         >
-                          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg font-bold group-hover:scale-110 transition-transform">
-                            {iconEmoji}
-                          </div>
-                          <div>
-                            <h4 className="font-black text-xs sm:text-sm truncate">{cat.name}</h4>
-                            <span className="text-[10px] opacity-80 font-medium">{count} sucursales</span>
+                          <span className="text-xl group-hover:scale-110 transition-transform">{iconEmoji}</span>
+                          <div className="text-left pointer-events-none">
+                            <span className="block font-black text-xs sm:text-sm tracking-wide truncate max-w-[120px]">{cat.name}</span>
+                            <span className={`block text-[10px] ${isSelected ? 'text-cyan-100' : 'text-slate-400'}`}>
+                              {count} sucursales
+                            </span>
                           </div>
                         </button>
                       )
