@@ -1514,6 +1514,46 @@ export default function MarketplaceView() {
 
             </div>
 
+            {/* SECCIÓN ACTUALIZADA: EXPANDE TU NEGOCIO CON NÚMERO Y CORREO ESPECÍFICOS */}
+            <div className={`w-full rounded-3xl p-6 sm:p-8 border transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl ${
+              darkMode 
+                ? 'bg-[#111827]/90 border-cyan-500/40 text-white shadow-cyan-950/50' 
+                : 'bg-white border-cyan-300 text-slate-900 shadow-cyan-100'
+            }`}>
+              <div className="space-y-2 text-center md:text-left">
+                <span className="inline-block bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-500/30">
+                  🚀 Expande tu Negocio
+                </span>
+                <h4 className="text-xl sm:text-2xl font-black tracking-tight">
+                  ¿Te gustaría ser parte de MarketGuate?
+                </h4>
+                <p className="text-xs sm:text-sm text-slate-400 font-medium max-w-xl">
+                  No esperes más y asocia tu negocio con nosotros y QuantikaPOS. Contáctanos hoy mismo para habilitar tu presencia online y empezar a recibir pedidos.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-3 shrink-0">
+                <a 
+                  href="https://wa.me/50248069299?text=Hola,%20me%20gustaría%20asociar%20mi%20negocio%20a%20MarketGuate%20y%20QuantikaPOS" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider shadow-lg transition-all flex items-center gap-2"
+                >
+                  <span>💬</span> Contáctanos por WhatsApp
+                </a>
+                <a 
+                  href="mailto:codenexaacademy@gmail.com?subject=Asociar%20mi%20negocio%20a%20MarketGuate" 
+                  className={`font-black px-6 py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-all border flex items-center gap-2 ${
+                    darkMode 
+                      ? 'bg-slate-800 hover:bg-slate-700 text-cyan-400 border-slate-700' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-cyan-700 border-slate-300'
+                  }`}
+                >
+                  <span>✉️</span> Enviar Correo
+                </a>
+              </div>
+            </div>
+
             {globalSearch.trim() !== '' ? (
               <div className="space-y-4 pt-2">
                 <h3 className="text-base font-bold text-cyan-600 dark:text-cyan-400">
