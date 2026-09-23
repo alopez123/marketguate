@@ -46,8 +46,10 @@ export default function MarketplaceView() {
   const [branchSearch, setBranchSearch] = useState('')
   const [selectedProductCategory, setSelectedProductCategory] = useState<string | null>(null)
 
-  // Estado para la Vista Previa del Producto
+  // Estado para la Vista Previa del Producto y Carrusel de Galería
   const [previewProduct, setPreviewProduct] = useState<any | null>(null)
+  const [productGallery, setProductGallery] = useState<any[]>([])
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
 
   // Estado del Carrito de Compras y Modal de Checkout
   const [cart, setCart] = useState<any[]>([])
@@ -352,6 +354,28 @@ export default function MarketplaceView() {
     window.open(encodedURL, '_blank')
     setIsBranchWhatsAppModalOpen(false)
     setBranchWhatsAppMessage('')
+  }
+
+  async function handleOpenPreview(prod: any) {
+    setPreviewProduct(prod)
+    setActiveImageIndex(0)
+    
+    const images = []
+    if (prod.image_url) {
+      images.push({ id: 'main', image_url: prod.image_url })
+    }
+
+    const { data, error } = await supabase.rpc('get_product_extras', {
+      p_product_id: prod.id
+    })
+
+    if (!error && data && data.length > 0) {
+      data.forEach((img: any) => {
+        images.push(img)
+      })
+    }
+
+    setProductGallery(images)
   }
 
   function handleDownloadPastPDF(order: any) {
@@ -1069,30 +1093,82 @@ export default function MarketplaceView() {
         )}
 
         {previewProduct && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-lg rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors`}>
-              <button onClick={() => setPreviewProduct(null)} className="absolute top-4 right-4 text-slate-400 hover:text-cyan-500 font-bold text-base w-8 h-8 rounded-full flex items-center justify-center bg-black/20">✕</button>
+          <div 
+            onClick={() => setPreviewProduct(null)}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className={`${darkMode ? 'bg-[#111827] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'} border w-full max-w-3xl rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 transition-colors max-h-[92vh] overflow-y-auto`}
+            >
+              <button onClick={() => setPreviewProduct(null)} className="absolute top-4 right-4 text-slate-400 hover:text-cyan-500 font-bold text-base w-8 h-8 rounded-full flex items-center justify-center bg-black/20 z-20">✕</button>
               
               <div className="space-y-4 text-center">
-                {previewProduct.image_url ? (
-                  <div className="relative w-full h-72 rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-700 shadow-xl bg-black/40">
-                    <img src={previewProduct.image_url} alt={previewProduct.name} className="w-full h-full object-cover" />
+                {productGallery.length > 0 ? (
+                  <div className="relative w-full h-96 sm:h-[420px] rounded-3xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-2xl bg-slate-950 flex items-center justify-center group">
+                    <div 
+                      className="absolute inset-0 bg-cover bg-center filter blur-xl opacity-30 scale-110 pointer-events-none"
+                      style={{ backgroundImage: `url(${productGallery[activeImageIndex]?.image_url})` }}
+                    ></div>
+
+                    <img 
+                      src={productGallery[activeImageIndex]?.image_url} 
+                      alt={previewProduct.name} 
+                      className="relative z-10 w-full h-full object-contain transition-all duration-500 p-2" 
+                    />
+
+                    {productGallery.length > 1 && (
+                      <>
+                        <button 
+                          onClick={() => setActiveImageIndex(prev => (prev === 0 ? productGallery.length - 1 : prev - 1))}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 bg-black/60 hover:bg-cyan-600 text-white w-11 h-11 rounded-full flex items-center justify-center font-black text-xl backdrop-blur-md transition-all shadow-xl border border-white/10"
+                        >
+                          ‹
+                        </button>
+                        <button 
+                          onClick={() => setActiveImageIndex(prev => (prev === productGallery.length - 1 ? 0 : prev + 1))}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 bg-black/60 hover:bg-cyan-600 text-white w-11 h-11 rounded-full flex items-center justify-center font-black text-xl backdrop-blur-md transition-all shadow-xl border border-white/10"
+                        >
+                          ›
+                        </button>
+
+                        <div className="absolute bottom-3 right-3 z-20 bg-black/70 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-mono font-bold text-cyan-400 border border-white/10">
+                          {activeImageIndex + 1} / {productGallery.length}
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
-                  <div className={`w-full h-56 ${darkMode ? 'bg-[#070b12] border-slate-700 text-slate-500' : 'bg-slate-100 border-slate-200 text-slate-400'} rounded-2xl flex items-center justify-center text-sm border font-bold`}>Sin imagen disponible</div>
+                  <div className={`w-full h-72 ${darkMode ? 'bg-[#070b12] border-slate-800 text-slate-500' : 'bg-slate-100 border-slate-200 text-slate-400'} rounded-3xl flex items-center justify-center text-xs border font-bold`}>Sin imagen disponible</div>
+                )}
+
+                {productGallery.length > 1 && (
+                  <div className="flex items-center justify-center gap-3 overflow-x-auto pb-1">
+                    {productGallery.map((img, idx) => (
+                      <button
+                        key={`thumb-${img.id || idx}`}
+                        onClick={() => setActiveImageIndex(idx)}
+                        className={`w-16 h-16 rounded-2xl overflow-hidden border-2 transition-all shrink-0 ${
+                          activeImageIndex === idx ? 'border-cyan-500 scale-105 shadow-lg shadow-cyan-500/30' : 'border-transparent opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={img.image_url} alt="Miniatura" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
                 )}
                 
                 <div className="space-y-2">
                   <span className="inline-block bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-3 py-1 rounded-full text-xs font-bold uppercase border border-cyan-500/30">
                     {categories.find(c => c.id === previewProduct.category_id)?.name || 'General'}
                   </span>
-                  <h3 className="text-2xl font-black">{previewProduct.name}</h3>
-                  <p className="text-cyan-600 dark:text-cyan-400 font-mono font-black text-2xl" translate="no">Q {previewProduct.price}</p>
+                  <h3 className="text-2xl sm:text-3xl font-black">{previewProduct.name}</h3>
+                  <p className="text-cyan-600 dark:text-cyan-400 font-mono font-black text-3xl" translate="no">Q {previewProduct.price}</p>
                 </div>
               </div>
 
               {previewProduct.description && (
-                <div className={`p-4 rounded-2xl text-xs leading-relaxed ${darkMode ? 'bg-[#070b12] text-slate-300 border border-slate-800' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
+                <div className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${darkMode ? 'bg-[#070b12] text-slate-300 border border-slate-800' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
                   <strong className="block text-cyan-600 dark:text-cyan-400 mb-1">Descripción:</strong>
                   {previewProduct.description}
                 </div>
@@ -1101,13 +1177,13 @@ export default function MarketplaceView() {
               <div className="flex gap-3">
                 <button 
                   onClick={(e) => { addToCart(previewProduct, e); setPreviewProduct(null); }}
-                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-lg"
+                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 rounded-2xl text-xs sm:text-sm uppercase tracking-wider transition-colors shadow-lg"
                 >
                   🛒 Agregar al Carrito
                 </button>
                 <button 
                   onClick={() => setPreviewProduct(null)} 
-                  className={`px-4 py-3.5 rounded-xl text-xs font-bold border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'}`}
+                  className={`px-6 py-4 rounded-2xl text-xs sm:text-sm font-bold border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'}`}
                 >
                   Cerrar
                 </button>
@@ -1402,7 +1478,7 @@ export default function MarketplaceView() {
                 {filteredBranchProducts.map(prod => (
                   <div 
                     key={`prod-${prod.id}`} 
-                    onClick={() => setPreviewProduct(prod)}
+                    onClick={() => handleOpenPreview(prod)}
                     className={`${darkMode ? 'bg-[#111827] border-slate-800 hover:border-cyan-500/40' : 'bg-white border-slate-300 hover:border-cyan-500 shadow-md'} border rounded-3xl p-4 flex flex-col justify-between gap-4 transition-all group cursor-pointer`}
                   >
                     <div className="flex gap-4 items-center">
@@ -1452,7 +1528,7 @@ export default function MarketplaceView() {
                         {catProducts.map(prod => (
                           <div 
                             key={`prod-${prod.id}`} 
-                            onClick={() => setPreviewProduct(prod)}
+                            onClick={() => handleOpenPreview(prod)}
                             className={`${darkMode ? 'bg-[#111827] border-slate-800 hover:border-cyan-500/40' : 'bg-white border-slate-300 hover:border-cyan-500 shadow-md'} border rounded-3xl p-4 flex flex-col justify-between gap-4 transition-all group cursor-pointer`}
                           >
                             <div className="flex gap-4 items-center">
@@ -1514,7 +1590,6 @@ export default function MarketplaceView() {
 
             </div>
 
-            {/* SECCIÓN ACTUALIZADA: EXPANDE TU NEGOCIO CON NÚMERO Y CORREO ESPECÍFICOS */}
             <div className={`w-full rounded-3xl p-6 sm:p-8 border transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl ${
               darkMode 
                 ? 'bg-[#111827]/90 border-cyan-500/40 text-white shadow-cyan-950/50' 
@@ -1607,14 +1682,12 @@ export default function MarketplaceView() {
             ) : (
               <div className="space-y-6">
                 
-                {/* CARRUSEL MODERNO CON BOTONES DE NAVEGACIÓN Y ARRASTRE FLUIDO */}
                 <div className="space-y-3 relative group">
                   <div className="flex items-center justify-between">
                     <h2 className={`text-sm sm:text-base font-black tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                       Explora por Categoría
                     </h2>
                     
-                    {/* Botones de Flechas de Navegación Estilo Premium */}
                     <div className="hidden sm:flex items-center gap-2">
                       <button 
                         onClick={() => {
@@ -1658,7 +1731,7 @@ export default function MarketplaceView() {
                       if (!isDragging) return
                       e.preventDefault()
                       const x = e.pageX - categoryScrollRef.current!.offsetLeft
-                      const walk = (x - startX) * 1.5 // velocidad de arrastre
+                      const walk = (x - startX) * 1.5
                       categoryScrollRef.current!.scrollLeft = scrollLeft - walk
                     }}
                     className="flex items-center gap-3 overflow-x-auto pb-4 pt-2 scrollbar-none snap-x cursor-grab active:cursor-grabbing select-none"
