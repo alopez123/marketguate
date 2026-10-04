@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcrypt';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,11 +30,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'El enlace de recuperación ha expirado.' }, { status: 400 });
     }
 
-    // 2. Actualizar la contraseña y limpiar los tokens
+    // 2. Encriptar la contraseña con bcrypt antes de guardarla
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 3. Actualizar la contraseña hasheada y limpiar los tokens
     const { error: updateError } = await supabaseAdmin
       .from('marketusers')
       .update({
-        password: password,
+        password: hashedPassword,
         reset_token: null,
         reset_token_expires: null,
       })
