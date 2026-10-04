@@ -178,8 +178,10 @@ export default function MarketplaceView() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Error en el registro')
         
-        alert('¡Registro exitoso! Ya puedes iniciar sesión.')
+        // Muestra el mensaje que viene del API indicando que revise su correo
+        alert(data.message || '¡Registro exitoso! Por favor verifica tu correo electrónico para activar tu cuenta antes de iniciar sesión.')
         setIsSignUp(false)
+        setAuthModalOpen(false)
       } else {
         const res = await fetch('/api/market-auth/login', {
           method: 'POST',

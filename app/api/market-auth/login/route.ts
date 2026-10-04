@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Verificar si la cuenta ya fue activada
-    if (!user.is_active) {
-      return NextResponse.json({ error: 'Tu cuenta aún no está activa. Revisa tu correo.' }, { status: 400 });
+   if (!user.is_active) {
+      return NextResponse.json({ error: 'Tu cuenta aún no ha sido activada. Revisa tu correo electrónico.' }, { status: 403 });
     }
 
     // 3. Comparar la contraseña con bcrypt
