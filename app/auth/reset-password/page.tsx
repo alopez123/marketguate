@@ -33,7 +33,7 @@ function ResetPasswordForm() {
       if (res.ok) {
         setStatus('success')
         setMessage('Contraseña actualizada con éxito. Redirigiendo...')
-        setTimeout(() => router.push('/login'), 2000)
+        setTimeout(() => router.push('/'), 2000)
       } else {
         setStatus('error')
         setMessage(data.error || 'El enlace es inválido o ha expirado.')
