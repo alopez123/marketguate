@@ -1,78 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    const { token, password } = await request.json();
 
-    if (!email) {
-      return NextResponse.json({ error: 'El correo electrónico es requerido.' }, { status: 400 });
+    if (!token || !password) {
+      return NextResponse.json({ error: 'El token y la nueva contraseña son requeridos.' }, { status: 400 });
     }
 
-    // 1. Verificar si el usuario existe en tu tabla marketusers
-    const { data: user, error: userError } = await supabase
+    // 1. Buscar al usuario por medio del token y verificar expiración
+    const { data: user, error: userError } = await supabaseAdmin
       .from('marketusers')
-      .select('id, email')
-      .eq('email', email)
+      .select('id, email, reset_token_expires')
+      .eq('reset_token', token)
       .single();
 
-    // Por seguridad, es recomendable devolver un mensaje genérico 
-    // para evitar que descubran qué correos están registrados.
     if (userError || !user) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Si el correo está registrado, recibirás las instrucciones.' 
-      });
+      return NextResponse.json({ error: 'El enlace de recuperación es inválido.' }, { status: 400 });
     }
 
-    // 2. Generar un token criptográfico seguro y definir expiración (1 hora)
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 3600000).toISOString();
+    if (user.reset_token_expires && new Date(user.reset_token_expires) < new Date()) {
+      return NextResponse.json({ error: 'El enlace de recuperación ha expirado.' }, { status: 400 });
+    }
 
-    // 3. Guardar el token en la tabla marketusers
-    const { error: updateError } = await supabase
+    // 2. Actualizar la contraseña y limpiar los tokens
+    const { error: updateError } = await supabaseAdmin
       .from('marketusers')
       .update({
-        reset_token: token,
-        reset_token_expires: expiresAt,
+        password: password,
+        reset_token: null,
+        reset_token_expires: null,
       })
       .eq('id', user.id);
 
     if (updateError) {
-      throw new Error('No se pudo generar el token de recuperación.');
+      throw new Error('No se pudo actualizar la contraseña en la base de datos.');
     }
-
-    // 4. Construir el enlace que llevará al usuario a tu interfaz de cambio de contraseña
-    const resetLink = `${request.nextUrl.origin}/auth/reset-password?token=${token}`;
-
-    // 5. Enviar el correo electrónico
-    // (Puedes integrar aquí tu servicio de correo favorito como Resend, Nodemailer, SendGrid, etc.)
-    // Ejemplo usando un servicio de correo o registrándolo en consola para pruebas:
-    console.log('--- ENLACE DE RECUPERACIÓN ---');
-    console.log(resetLink);
-    console.log('------------------------------');
-
-    // TODO: Reemplaza esto con la llamada real a tu proveedor de correo (ej. Resend)
-    /*
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
-        },
-        body: JSON.stringify({
-          from: 'soporte@tu-dominio.com',
-          to: user.email,
-          subject: 'Recuperación de Contraseña - MarketGuate',
-          html: `<p>Haz clic en el siguiente enlace para restablecer tu contraseña: <a href="${resetLink}">Restablecer Contraseña</a></p>`
-        })
-      });
-    */
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Correo de recuperación enviado exitosamente.' 
+      message: 'Contraseña actualizada exitosamente.' 
     });
 
   } catch (error: any) {
