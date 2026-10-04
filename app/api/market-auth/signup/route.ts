@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const activationToken = crypto.randomBytes(32).toString('hex');
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    // 4. Insertar el nuevo usuario con is_active en false y su token
+    // 4. Insertar el nuevo usuario con is_active en false y sus tokens
     const { error: insertError } = await supabaseAdmin
       .from('marketusers')
       .insert([
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         html: `
           <div style="font-family: Arial, sans-serif; background-color: #030712; color: #f3f4f6; padding: 30px; border-radius: 12px;">
             <h2 style="color: #38bdf8; text-align: center;">¡Bienvenido a MarketGuate!</h2>
-            <p>Gracias por registrarte. Para comenzar a utilizar tu cuenta y realizar pedidos, por favor confirma tu correo electrónico haciendo clic en el siguiente botón:</p>
+            <p>Gracias por registrarte. Para activar tu cuenta y poder iniciar sesión, por favor confirma tu correo electrónico haciendo clic en el siguiente botón:</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${activationUrl}" style="background: linear-gradient(to right, #0284c7, #2563eb); color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block;">Activar Mi Cuenta</a>
             </div>
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       success: true, 
-      message: '¡Registro exitoso! Revisa tu correo electrónico para activar tu cuenta.' 
+      message: '¡Registro exitoso! Por favor verifica tu correo electrónico para activar tu cuenta antes de iniciar sesión.' 
     });
 
   } catch (error: any) {
